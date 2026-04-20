@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>레오엑스 라이더앱 프로토타입</title>
+  <link rel="stylesheet" as="style" crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <link rel="stylesheet" href="style.css?v=1.1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* 
+       =========================================================================
+       EMERGENCY UI OVERRIDE - Rest Mode Fix 
+       =========================================================================
+    */
+    .empty-state {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: center !important;
+      background: radial-gradient(circle at center, #ffffff 0%, #f8fafc 100%) !important;
+      z-index: 100 !important;
+      padding: 40px 24px !important;
+      text-align: center !important;
+      overflow: hidden !important;
+    }
+    
+    .empty-watermark {
+      position: absolute !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) rotate(-12deg) !important;
+      font-size: clamp(100px, 20vw, 160px) !important;
+      font-weight: 1000 !important;
+      color: #f1f5f9 !important;
+      letter-spacing: -8px !important;
+      z-index: 1 !important;
+      opacity: 0.8 !important;
+      white-space: nowrap !important;
+      pointer-events: none !important;
+      user-select: none !important;
+      -webkit-text-stroke: 1px rgba(226, 232, 240, 0.5) !important;
+    }
+    
+    .empty-content {
+      position: relative !important;
+      z-index: 2 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+    }
+    
+    .empty-icon-wrapper {
+      position: relative !important;
+      margin-bottom: 30px !important;
+    }
+    
+    .empty-icon {
+      width: 80px !important;
+      height: 80px !important;
+      color: #3b82f6 !important;
+      background: #eff6ff !important;
+      border-radius: 50% !important;
+      padding: 20px !important;
+      box-shadow: 0 10px 25px rgba(59, 130, 246, 0.15) !important;
+    }
+    
+    .pulse-ring {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      background: rgba(59, 130, 246, 0.2) !important;
+      border-radius: 50% !important;
+      animation: ripple_fixed 3s infinite ease-out !important;
+      z-index: -1 !important;
+    }
+    
+    @keyframes ripple_fixed {
+      0% { transform: scale(1); opacity: 0.6; }
+      100% { transform: scale(3); opacity: 0; }
+    }
+    
+    .empty-title {
+      font-size: 24px !important;
+      font-weight: 950 !important;
+      color: #1e293b !important;
+      letter-spacing: -0.8px !important;
+      margin-bottom: 12px !important;
+      line-height: 1.2 !important;
+    }
+    
+    .empty-text {
+      font-size: 17px !important;
+      color: #64748b !important;
+      line-height: 1.7 !important;
+      font-weight: 600 !important;
+      letter-spacing: -0.4px !important;
+    }
+
+    #urgent-empty-state.hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="app-container">
+    <!-- Map Background -->
+    <div id="map" class="map-container"></div>
+
+    <!-- Top UI Overlays (Main View) -->
+    <div class="top-ui">
+      <!-- Announcement -->
+      <div class="announcement-pill">
+        <strong>공지사항</strong> 가장 중요한 것은 라이더님의 안전입니...
+      </div>
+
+      <!-- Top Controls -->
+      <div class="top-controls">
+        <button class="hamburger-btn">
+          <i data-lucide="menu"></i>
+        </button>
+
+        <div class="status-panel">
+          <div class="status-item" id="open-progress-overlay" style="cursor:pointer;">진행 <span>0</span></div>
+          <div class="status-item">완료 <span>0</span></div>
+        </div>
+
+        <button class="driving-toggle">
+          <span class="toggle-text">운행</span>
+          <div class="toggle-switch"></div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Right Floating Action Buttons -->
+    <div class="floating-right">
+      <button class="float-btn">
+        <div class="icon-text">N</div>
+      </button>
+      <button class="float-btn"><i data-lucide="flame" class="flame-icon"></i></button>
+      <button class="float-btn"><i data-lucide="crosshair" class="crosshair-icon"></i></button>
+    </div>
+
+    <!-- Bottom Sheet (Main View) -->
+    <div id="bottom-sheet" class="bottom-sheet">
+
+      <!-- Floating Status Bar -->
+      <div class="floating-status">
+        <i data-lucide="loader-2" class="status-spinner"></i>
+        <span>라이더님께 적합한 호출을 찾는 중이에요</span>
+      </div>
+
+      <div class="drag-handle-area" id="drag-handle">
+        <div class="drag-bar"></div>
+      </div>
+
+      <!-- 50:50 Tab Navigation -->
+      <div class="tab-nav">
+        <button class="tab-btn active" id="tab-mission">미션</button>
+        <button class="tab-btn" id="tab-order">셀프 배정</button>
+        <div class="tab-indicator"></div>
+      </div>
+
+      <!-- Content Area -->
+      <div class="sheet-content">
+        <!-- Mission View -->
+        <div id="view-mission" class="view section-active">
+          <div class="mission-header">
+            <div class="mh-left">
+              <span class="subtitle">RIDER CHALLENGE</span>
+              <h1 class="title">오늘의 미션</h1>
+            </div>
+            <div class="mh-right">
+              달성률 <strong>45%</strong>
+            </div>
+          </div>
+          <div class="card-list">
+            <!-- DAILY Card -->
+            <div class="mission-card">
+              <div class="card-top">
+                <div class="card-title-area">
+                  <span class="tag tag-daily">DAILY</span>
+                  <span class="card-title">6~13건 배달 시</span>
+                </div>
+                <div class="card-reward blue">+45,000원</div>
+              </div>
+              <div class="progress-container">
+                <div class="progress-bar">
+                  <div class="progress-fill" style="width: 100%;"></div>
+                </div>
+                <div class="progress-labels">
+                  <span class="progress-left">미션 달성 완료</span>
+                  <span class="progress-right">목표 13건</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- HOT Bonus Card 1: All -->
+            <div class="mission-card">
+              <div class="shipper-badge-list">
+                <span class="tag-shipper-all">전체 주문 대상</span>
+              </div>
+              <div class="card-top">
+                <div class="card-title-area" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="tag tag-hot">HOT</span>
+                    <span class="card-title">강남구 지역 배달</span>
+                  </div>
+                  <div class="card-desc">건당 추가 보너스 지급</div>
+                </div>
+                <div class="card-reward red">+500원/건</div>
+              </div>
+            </div>
+
+            <!-- HOT Bonus Card 2: Olive Young -->
+            <div class="mission-card">
+              <div class="shipper-badge-list">
+                <span class="tag-shipper olive-young">올리브영 대상</span>
+              </div>
+              <div class="card-top">
+                <div class="card-title-area" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="tag tag-hot">HOT</span>
+                    <span class="card-title">서초구 지역 배달</span>
+                  </div>
+                  <div class="card-desc">화주사 지정 보너스 지급</div>
+                </div>
+                <div class="card-reward red">+300원/건</div>
+              </div>
+            </div>
+
+            <!-- HOT Bonus Card 3: Barogo -->
+            <div class="mission-card">
+              <div class="shipper-badge-list">
+                <span class="tag-shipper barogo">바로고 대상</span>
+              </div>
+              <div class="card-top">
+                <div class="card-title-area" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="tag tag-hot">HOT</span>
+                    <span class="card-title">송파구 지역 배달</span>
+                  </div>
+                  <div class="card-desc">심야 시간대 보너스 증액</div>
+                </div>
+                <div class="card-reward red">+400원/건</div>
+              </div>
+            </div>
+
+            <!-- NEW Open Card -->
+            <div class="mission-card">
+              <div class="card-top">
+                <div class="card-title-area" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="tag tag-new">NEW</span>
+                    <span class="card-title">신규 지역 오픈</span>
+                  </div>
+                  <div class="card-desc">광진구 일부 지역 오픈 기념</div>
+                </div>
+                <a href="#" class="card-action">확인하기</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Urgent Order View -->
+        <div id="view-order" class="view">
+          <div id="urgent-content">
+            <div class="mission-header">
+              <div class="mh-left">
+                <span class="subtitle" style="color: #ef4444;">URGENT DISPATCH</span>
+                <h1 class="title">단가 상승!</h1>
+              </div>
+              <div class="mh-right">
+                픽업 대기중 <strong>3건</strong>
+              </div>
+            </div>
+            <div class="card-list">
+              <!-- Order Card 1 -->
+              <div class="recommend-card">
+                <div class="rc-price-row">
+                  <span class="rc-fee">5,200원</span>
+                  <span class="rc-dot">·</span>
+                  <span class="rc-distance">680m</span>
+                  <div class="rc-order-info">
+                    <i data-lucide="package" class="rc-box-icon"></i>
+                    <span class="rc-order-amt">21,000원</span>
+                  </div>
+                  <span class="rc-badge-prepaid">선결</span>
+                </div>
+                <div class="rc-divider"></div>
+                <div class="rc-route">
+                  <div class="rc-route-node">
+                    <div class="rc-node-bullet" style="background-color: #f97316;"></div>
+                    <div class="rc-node-content">
+                      <div class="rc-node-title-row">
+                        <span class="rc-node-title">올리브영[부산장산역점]</span>
+                        <span class="rc-node-dist">161m</span>
+                      </div>
+                      <div class="rc-node-desc">레오로 75 엑스빌딩 1층...</div>
+                    </div>
+                  </div>
+                  <div class="rc-route-node rc-mt">
+                    <div class="rc-node-bullet" style="background-color: #3b82f6;"></div>
+                    <div class="rc-node-content">
+                      <div class="rc-node-title-row">
+                        <span class="rc-node-title rc-black-bold">레오로468번길 ** ***</span>
+                      </div>
+                      <div class="rc-node-desc">벨누르지말고 문앞에두고가주세요...</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+  
+              <!-- Order Card 2 -->
+              <div class="recommend-card">
+                <div class="rc-price-row">
+                  <span class="rc-fee">4,500원</span>
+                  <span class="rc-dot">·</span>
+                  <span class="rc-distance">1.2km</span>
+                  <div class="rc-order-info">
+                    <i data-lucide="package" class="rc-box-icon"></i>
+                    <span class="rc-order-amt">18,500원</span>
+                  </div>
+                  <span class="rc-badge-prepaid">현결</span>
+                </div>
+                <div class="rc-divider"></div>
+                <div class="rc-route">
+                <div class="rc-route-node">
+                  <div class="rc-node-bullet" style="background-color: #f97316;"></div>
+                  <div class="rc-node-content">
+                    <div class="rc-node-title-row">
+                      <span class="rc-node-title">버거킹 파라다이스점</span>
+                      <span class="rc-node-dist">820m</span>
+                    </div>
+                    <div class="rc-node-desc">우동 123-4 1층 우측 픽업구...</div>
+                  </div>
+                </div>
+                <div class="rc-route-node rc-mt">
+                  <div class="rc-node-bullet" style="background-color: #3b82f6;"></div>
+                  <div class="rc-node-content">
+                    <div class="rc-node-title-row">
+                      <span class="rc-node-title rc-black-bold">해운대해변로 245 ** ***</span>
+                    </div>
+                    <div class="rc-node-desc">로비에 맡겨주세요...</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Order Card 3 -->
+            <div class="recommend-card">
+              <div class="rc-price-row">
+                <span class="rc-fee">3,800원</span>
+                <span class="rc-dot">·</span>
+                <span class="rc-distance">430m</span>
+                <div class="rc-order-info">
+                  <i data-lucide="package" class="rc-box-icon"></i>
+                  <span class="rc-order-amt">24,000원</span>
+                </div>
+                <span class="rc-badge-prepaid" style="background-color: #f3f4f6; color: #4b5563;">카드</span>
+              </div>
+              <div class="rc-divider"></div>
+              <div class="rc-route">
+                <div class="rc-route-node">
+                  <div class="rc-node-bullet" style="background-color: #f97316;"></div>
+                  <div class="rc-node-content">
+                    <div class="rc-node-title-row">
+                      <span class="rc-node-title">본죽&비빔밥 [수영역점]</span>
+                      <span class="rc-node-dist">210m</span>
+                    </div>
+                    <div class="rc-node-desc">수영로 324 2층...</div>
+                  </div>
+                </div>
+                <div class="rc-route-node rc-mt">
+                  <div class="rc-node-bullet" style="background-color: #3b82f6;"></div>
+                  <div class="rc-node-content">
+                    <div class="rc-node-title-row">
+                      <span class="rc-node-title rc-black-bold">수영로 395 래미안 ***동 ***호</span>
+                    </div>
+                    <div class="rc-node-desc">공동현관 비밀번호 1234*</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State for Rest Mode (Now handled by inline script for maximum reliability) -->
+          <div id="urgent-empty-state" class="empty-state hidden">
+            <div class="empty-watermark">LEO X</div>
+            <div class="empty-content">
+              <div class="empty-icon-wrapper">
+                <i data-lucide="coffee" class="empty-icon"></i>
+                <div class="pulse-ring"></div>
+              </div>
+              <h2 class="empty-title">라이더님은 현재 휴식 중</h2>
+              <p class="empty-text">상단의 '운행' 버튼을 켜면<br>실시간 배달 리스트를 볼 수 있습니다.</p>
+            </div>
+          </div>
+          
+          <script>
+            // Emergency Inline Toggle Script
+            document.addEventListener('DOMContentLoaded', () => {
+              const toggleBtn = document.querySelector('.driving-toggle');
+              const restView = document.getElementById('urgent-empty-state');
+              const orderList = document.getElementById('urgent-content');
+              
+              if (toggleBtn && restView) {
+                toggleBtn.addEventListener('click', () => {
+                  // We delay slightly to let app.js update classes if it's working
+                  setTimeout(() => {
+                    const isRest = toggleBtn.classList.contains('offline');
+                    if (isRest) {
+                      restView.classList.remove('hidden');
+                      if(orderList) orderList.classList.add('hidden');
+                      if(window.lucide) lucide.createIcons();
+                    } else {
+                      restView.classList.add('hidden');
+                      if(orderList) orderList.classList.remove('hidden');
+                    }
+                  }, 50);
+                });
+              }
+            });
+          </script>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- 1. Progress & Completed List Overlay -->
+    <!-- ========================================================= -->
+    <div id="progress-overlay" class="fullscreen-overlay hidden">
+      <div class="overlay-header">
+        <button class="close-btn" id="close-progress"><i data-lucide="x"></i></button>
+        <div class="overlay-tabs">
+          <div class="o-tab active">진행 <span id="overlay-progress-cnt">2</span></div>
+          <div class="o-tab">완료 <span style="color:#9ca3af">3</span></div>
+          <div class="o-tab-indicator"></div>
+        </div>
+        <div class="driving-toggle-mini">
+          <span class="toggle-text" style="color:white; font-size:13px; font-weight:800;">운행</span>
+          <div class="toggle-switch-mini"
+            style="width:32px; height:32px; background:#3b82f6; border-radius:10px; display:flex; align-items:center; justify-content:center;">
+            <div style="width:12px; height:12px; background:white; border-radius:50%;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="overlay-content">
+        <div class="card-list">
+
+          <!-- Sample Progress Card to click on -->
+          <div class="recommend-card progress-card" id="sample-progress-card" style="cursor:pointer;">
+            <div class="rc-header">
+              <div class="rc-urgency">
+                <span class="rc-time">25분 남음</span>
+                <span class="rc-badge-purple">실속배달</span>
+                <div class="rc-badge-star" style="background-color: #f59e0b;"><i data-lucide="star"
+                    class="rc-star-icon"></i></div>
+              </div>
+              <div class="assign-status"><span class="blue-text" style="color:#3b82f6; font-weight:900;">배정</span> <i
+                  data-lucide="flag" class="flag-icon" style="color:#3b82f6; margin-left:2px; padding-bottom:2px;"></i>
+              </div>
+            </div>
+            <div class="rc-price-row">
+              <span class="rc-fee">3,800원</span>
+              <span class="rc-dot">·</span>
+              <span class="rc-distance">680m</span>
+              <div class="rc-order-info"><i data-lucide="package" class="rc-box-icon"></i><span
+                  class="rc-order-amt">21,000원</span></div>
+              <span class="rc-badge-prepaid">선결</span>
+              <span class="rc-badge-gray" style="margin-left:4px;">비대면</span>
+            </div>
+            <div class="rc-divider"></div>
+            <div class="rc-route">
+              <div class="rc-route-node">
+                <div class="rc-node-bullet" style="background-color: #f97316;"></div>
+                <div class="rc-node-content">
+                  <div class="rc-node-title-row">
+                    <span class="rc-node-title rc-black-bold">상점명이 긴 경우에는 두줄까지만 표시해주세요 이렇게 넘어가면 점처리...</span>
+                    <span class="rc-node-dist">161m</span>
+                  </div>
+                  <div class="rc-node-desc">레오로 75 엑스빌딩 1층 길어질 때 모든 텍스트를 표시해주시면 됩니다</div>
+                </div>
+              </div>
+              <div class="rc-route-node rc-mt">
+                <div class="rc-node-bullet" style="background-color: #d1d5db;"></div>
+                <div class="rc-node-content">
+                  <div class="rc-node-title-row">
+                    <span class="rc-node-title rc-black-bold" style="color:#6b7280;">레오로468번길 11 엑스뷰아파트 106동
+                      2002호</span>
+                  </div>
+                  <div class="rc-node-desc">벨누르지말고 문앞에두고가주세요 벨누르지말고 문... [클렌징폼x1], [마스크팩x5]</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ========================================================= -->
+    <!-- 2. Order Detail View Screen -->
+    <!-- ========================================================= -->
+    <div id="order-detail-view" class="detail-view hidden">
+      <!-- Detail Top UI -->
+      <div class="detail-top-ui">
+        <button class="back-btn" id="back-from-detail"><i data-lucide="arrow-left"></i></button>
+        <div class="detail-id-pill">
+          <span class="pill-label">픽업번호</span>
+          <span class="pill-store">올리브영</span>
+          <strong class="pill-id">G250922071503...</strong>
+        </div>
+      </div>
+
+      <!-- Detail Bottom Area -->
+      <div class="detail-bottom-area">
+        <!-- Horizontal Scroll Buttons -->
+        <div class="detail-floating-btns">
+          <button class="df-btn"><i data-lucide="file-text"></i>물품정보</button>
+          <button class="df-btn"><i data-lucide="headphones"></i>콜센터 연결</button>
+          <button class="df-btn"><i data-lucide="clock"></i>조리지연 신고</button>
+          <button class="df-btn"><i data-lucide="rotate-ccw"></i>픽업시작</button>
+        </div>
+
+        <!-- Detail Bottom Sheet -->
+        <div class="detail-bottom-sheet">
+          <div class="drag-handle-area" style="padding-top:16px; margin-bottom:8px;">
+            <div class="drag-bar"></div>
+          </div>
+
+          <div class="dbs-header">
+            <div class="dbs-tags">
+              <span class="rc-badge-purple">실속배달</span>
+              <span class="rc-badge-gray">비대면배달</span>
+              <span class="rc-badge-pink">주류포함</span>
+            </div>
+            <div class="dbs-status"><span class="blue-text" style="color:#3b82f6; font-weight:900;">배정</span> <i
+                data-lucide="flag" class="flag-icon" style="color:#3b82f6; margin-left:2px; padding-bottom:2px;"></i>
+            </div>
+          </div>
+
+          <div class="dbs-pickup-node">
+            <div class="rc-node-bullet" style="background-color: #f97316; margin-top:8px;"></div>
+            <div class="dbs-pickup-info">
+              <div class="dbs-store-name">올리브영[레오점]-정기</div>
+              <div class="dbs-store-addr">레오로 75 엑스빌딩 1층</div>
+            </div>
+            <button class="dbs-route-btn"><i data-lucide="arrow-right-left"></i></button>
+          </div>
+
+          <div class="dbs-memos">
+            <div class="memo-box">파리바게트 건물이에요</div>
+            <div class="memo-box">건물비밀번호 <strong style="color:#111; font-weight:900; margin-left:4px;">#1122</strong>
+            </div>
+            <div class="memo-box alert-box">
+              <i data-lucide="alert-circle" class="alert-icon"></i>
+              <span>포장뜯어지지 않게 조심해주세요. 내용 없으면 숨김처리 해주세요(매장요청)</span>
+            </div>
+          </div>
+
+          <div class="dbs-actions">
+            <button class="action-btn">네비</button>
+            <button class="action-btn">전화</button>
+          </div>
+
+          <!-- Huge Swipe Button -->
+          <div class="huge-swipe-btn" id="pickup-swipe-btn">
+            <div class="hs-bg">픽업</div>
+            <div class="hs-slider"><i data-lucide="hand" class="hand-icon"></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+
+</html>
